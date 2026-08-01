@@ -1,3 +1,5 @@
+import { parse } from "@babel/parser";
+
 import type { AddedLine, GitComparison } from "../git/comparison.js";
 import { readFileAtCommit } from "../git/reader.js";
 
@@ -11,86 +13,8 @@ const supportedExtensions = new Set([
   ".mts",
   ".cts",
 ]);
-
-const extensionOf = (path: string): string => path.slice(path.lastIndexOf("."));
-
-const executableCode = (source: string): readonly string[] => {
-  const lines = source.replace(/\r\n/g, "\n").split("\n");
-  let state: "code" | "single" | "double" | "template" | "block" | "regex" =
-    "code";
-  let escaped = false;
-  return lines.map((line) => {
-    let output = "";
-    let previousCode = "";
-    for (let index = 0; index < line.length; index += 1) {
-      const character = line[index] ?? "";
-      const next = line[index + 1] ?? "";
-      if (state === "block") {
-        output += " ";
-        if (character === "*" && next === "/") {
-          output += " ";
-          index += 1;
-          state = "code";
-        }
-        continue;
-      }
-      if (
-        state === "single" ||
-        state === "double" ||
-        state === "template" ||
-        state === "regex"
-      ) {
-        output += " ";
-        if (
-          !escaped &&
-          ((state === "single" && character === "'") ||
-            (state === "double" && character === '"') ||
-            (state === "template" && character === "`") ||
-            (state === "regex" && character === "/"))
-        )
-          state = "code";
-        escaped = !escaped && character === "\\";
-        if (character !== "\\") escaped = false;
-        continue;
-      }
-      if (character === "/" && next === "/") {
-        output += " ".repeat(line.length - index);
-        break;
-      }
-      if (character === "/" && next === "*") {
-        output += "  ";
-        index += 1;
-        state = "block";
-        continue;
-      }
-      if (character === "'" || character === '"' || character === "`") {
-        output += " ";
-        state =
-          character === "'"
-            ? "single"
-            : character === '"'
-              ? "double"
-              : "template";
-        escaped = false;
-        continue;
-      }
-      if (
-        character === "/" &&
-        (!previousCode || /[([{:;,=!?&|+\-*%^~<>]/.test(previousCode))
-      ) {
-        output += " ";
-        state = "regex";
-        escaped = false;
-        continue;
-      }
-      output += character;
-      if (!/\s/.test(character)) previousCode = character;
-    }
-    if (state === "single" || state === "double" || state === "regex")
-      state = "code";
-    return output;
-  });
-};
+const roots = new Set(["test", "it", "describe", "suite", "context"]);
+const extensionOf = (path: string) => path.slice(path.lastIndexOf("."));
 
 export interface TestCallMatch {
   readonly addedLine: AddedLine;
@@ -99,8 +23,46 @@ export interface TestCallMatch {
   readonly evidence: string;
 }
 
-const callPattern =
-  /\b(test|it|describe|suite|context)\s*\.\s*(only|skip)\b(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\(/g;
+const walk = (
+  value: unknown,
+  visit: (node: Record<string, unknown>) => void,
+): void => {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) return value.forEach((item) => walk(item, visit));
+  const node = value as Record<string, unknown>;
+  if (typeof node.type === "string") visit(node);
+  for (const [key, child] of Object.entries(node)) {
+    if (key !== "loc" && key !== "start" && key !== "end" && key !== "extra")
+      walk(child, visit);
+  }
+};
+
+const callModifier = (
+  callee: Record<string, unknown>,
+): { kind: "only" | "skip"; line: number; column: number } | undefined => {
+  const chain: Record<string, unknown>[] = [];
+  let current: Record<string, unknown> | undefined = callee;
+  while (current?.type === "MemberExpression" && current.computed !== true) {
+    const property = current.property as Record<string, unknown>;
+    if (property.type !== "Identifier") return undefined;
+    chain.unshift(property);
+    current = current.object as Record<string, unknown>;
+  }
+  if (current?.type !== "Identifier" || !roots.has(String(current.name)))
+    return undefined;
+  const modifier = chain.find(
+    (part) => part.name === "only" || part.name === "skip",
+  );
+  const loc = modifier?.loc as
+    { start?: { line?: number; column?: number } } | undefined;
+  if (!modifier || !loc?.start?.line || loc.start.column === undefined)
+    return undefined;
+  return {
+    kind: modifier.name as "only" | "skip",
+    line: loc.start.line,
+    column: loc.start.column + 1,
+  };
+};
 
 export const findAddedJavaScriptTestCalls = async (
   comparison: GitComparison,
@@ -110,33 +72,35 @@ export const findAddedJavaScriptTestCalls = async (
   readonly skippedFiles: readonly string[];
 }> => {
   const addedByFile = new Map<string, AddedLine[]>();
-  for (const addedLine of comparison.addedLines) {
-    if (supportedExtensions.has(extensionOf(addedLine.file.path))) {
-      const lines = addedByFile.get(addedLine.file.path) ?? [];
-      lines.push(addedLine);
-      addedByFile.set(addedLine.file.path, lines);
-    }
+  for (const line of comparison.addedLines) {
+    if (supportedExtensions.has(extensionOf(line.file.path)))
+      addedByFile.set(line.file.path, [
+        ...(addedByFile.get(line.file.path) ?? []),
+        line,
+      ]);
   }
   const matches: TestCallMatch[] = [];
   const skippedFiles: string[] = [];
   for (const [path, addedLines] of addedByFile) {
     try {
-      const code = executableCode(
-        await readFileAtCommit(comparison.headCommit, path, cwd),
-      );
-      for (const addedLine of addedLines) {
-        const line = code[addedLine.line - 1];
-        if (line === undefined) continue;
-        for (const match of line.matchAll(callPattern)) {
-          const kind = match[2] as "only" | "skip";
+      const source = await readFileAtCommit(comparison.headCommit, path, cwd);
+      const added = new Map(addedLines.map((line) => [line.line, line]));
+      const ast = parse(source, {
+        sourceType: "unambiguous",
+        plugins: ["jsx", "typescript"],
+      });
+      walk(ast, (node) => {
+        if (node.type !== "CallExpression") return;
+        const modifier = callModifier(node.callee as Record<string, unknown>);
+        const addedLine = modifier && added.get(modifier.line);
+        if (modifier && addedLine)
           matches.push({
             addedLine,
-            kind,
-            column: (match.index ?? 0) + 1,
-            evidence: match[0],
+            kind: modifier.kind,
+            column: modifier.column,
+            evidence: `${String((node.callee as { type?: string }).type ?? "call")}`,
           });
-        }
-      }
+      });
     } catch {
       skippedFiles.push(path);
     }
