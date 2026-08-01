@@ -46,8 +46,9 @@ Requirements: Node.js 24 or later and pnpm 11 or later.
 
 ```text
 pnpm install
-pnpm dev -- inspect --help
+pnpm dev -- --help
 pnpm build
+pnpm cli -- --help
 pnpm lint
 pnpm typecheck
 pnpm format
@@ -55,8 +56,15 @@ pnpm format:check
 pnpm test
 pnpm test:unit
 pnpm test:integration
+pnpm smoke:cli
+pnpm test:package
 pnpm check
 ```
+
+`pnpm cli` runs the compiled entry point at `dist/cli/index.js`. `pnpm smoke:cli`
+builds and exercises that entry point directly. `pnpm test:package` packs the
+package, installs the resulting tarball into an isolated temporary consumer, and
+verifies the installed `agent-pr-guard` binary without publishing it.
 
 ## Proposed exit codes
 

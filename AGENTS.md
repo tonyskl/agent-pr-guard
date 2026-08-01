@@ -30,7 +30,9 @@ pnpm typecheck
 pnpm test:unit
 pnpm test:integration
 pnpm build
-node dist/cli/index.js --help
-node dist/cli/index.js --version
-node dist/cli/index.js inspect --help
+pnpm dev -- --help
+pnpm cli -- --help
+pnpm smoke:cli
+pnpm test:package
+pnpm check
 ```
