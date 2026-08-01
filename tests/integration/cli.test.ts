@@ -32,11 +32,13 @@ describe("agent-pr-guard CLI", () => {
     );
   });
 
-  it("uses inspect defaults and reports that analysis is not implemented", () => {
+  it("uses inspect defaults and returns the versioned inspection result", () => {
     const output = expectSuccess(runCli("inspect", "--format", "json"));
     expect(JSON.parse(output)).toMatchObject({
-      status: "not-implemented",
-      options: { base: "main", head: "HEAD", format: "json" },
+      schemaVersion: "1.0",
+      comparison: { base: "main", head: "HEAD" },
+      status: "passed",
+      findings: [],
     });
   });
 

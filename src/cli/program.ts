@@ -5,7 +5,10 @@ import {
   outputFormats,
 } from "../config/inspection-options.js";
 import { inspectPullRequest } from "../engine/inspect.js";
-import { formatNotImplementedResult } from "../reporting/not-implemented.js";
+import {
+  formatInspectionError,
+  formatInspectionReport,
+} from "../reporting/inspection-report.js";
 
 export const createProgram = (): Command => {
   const program = new Command();
@@ -28,10 +31,18 @@ export const createProgram = (): Command => {
         .default("human"),
     )
     .option("--config <path>", "path to a configuration file")
-    .action((rawOptions: unknown) => {
+    .action(async (rawOptions: unknown) => {
       const options = inspectionOptionsSchema.parse(rawOptions);
-      const result = inspectPullRequest(options);
-      process.stdout.write(formatNotImplementedResult(result, options.format));
+      try {
+        const result = await inspectPullRequest(options);
+        process.stdout.write(formatInspectionReport(result, options.format));
+        process.exitCode = result.status === "failed" ? 1 : 0;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Inspection failed.";
+        process.stderr.write(formatInspectionError(message, options.format));
+        process.exitCode = 2;
+      }
     });
 
   return program;

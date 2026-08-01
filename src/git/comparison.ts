@@ -15,6 +15,7 @@ export interface AddedLine {
 export interface GitComparison {
   readonly base: string;
   readonly head: string;
+  readonly headCommit: string;
   readonly files: readonly ChangedFile[];
   readonly addedLines: readonly AddedLine[];
 }

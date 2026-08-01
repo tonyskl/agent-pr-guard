@@ -37,24 +37,13 @@ if (build.status !== 0 || !existsSync(cliPath)) {
 expectCommand(["--help"], /Usage: agent-pr-guard/);
 expectCommand(["--version"], /^0\.1\.0\s*$/);
 expectCommand(["inspect", "--help"], /--base <ref>/);
-expectCommand(["inspect"], /analysis has not yet been implemented/);
+expectCommand(["inspect"], /Result: PASSED/);
 expectCommand(
-  [
-    "inspect",
-    "--base",
-    "origin/main",
-    "--head",
-    "feature/test",
-    "--format",
-    "json",
-  ],
-  /"base":"origin\/main".*"head":"feature\/test"/,
+  ["inspect", "--base", "main", "--head", "HEAD", "--format", "json"],
+  /"base":"main".*"head":"HEAD"/,
 );
-expectCommand(
-  ["inspect", "--format", "human"],
-  /analysis has not yet been implemented/,
-);
-expectCommand(["inspect", "--format", "json"], /"status":"not-implemented"/);
+expectCommand(["inspect", "--format", "human"], /Result: PASSED/);
+expectCommand(["inspect", "--format", "json"], /"schemaVersion":"1.0"/);
 
 const invalidFormat = run(process.execPath, [
   cliPath,

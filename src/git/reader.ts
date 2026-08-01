@@ -96,6 +96,7 @@ export const readGitComparison = async (
           "--unified=0",
           range,
           "--",
+          ...(file.previousPath ? [file.previousPath] : []),
           file.path,
         ],
         cwd,
@@ -110,5 +111,14 @@ export const readGitComparison = async (
     }
   }
 
-  return { base, head, files, addedLines };
+  return { base, head, headCommit, files, addedLines };
 };
+
+export const readFileAtCommit = async (
+  commit: string,
+  path: string,
+  cwd = process.cwd(),
+): Promise<string> =>
+  (await runGit(["show", "--no-textconv", `${commit}:${path}`], cwd)).toString(
+    "utf8",
+  );

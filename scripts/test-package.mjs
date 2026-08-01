@@ -113,7 +113,6 @@ try {
   for (const [args, expectedOutput] of [
     [["agent-pr-guard", "--help"], /Usage: agent-pr-guard/],
     [["agent-pr-guard", "--version"], /^0\.1\.0\s*$/],
-    [["agent-pr-guard", "inspect"], /analysis has not yet been implemented/],
   ]) {
     const result = requireSuccess(
       `Installed CLI ${args.slice(1).join(" ")}`,
@@ -122,6 +121,18 @@ try {
     if (!expectedOutput.test(result.stdout)) {
       throw new Error(`Unexpected installed CLI output:\n${result.stdout}`);
     }
+  }
+  const inspect = runPnpm(
+    ["exec", "agent-pr-guard", "inspect"],
+    consumerDirectory,
+  );
+  if (
+    inspect.status !== 2 ||
+    !inspect.stderr.includes("not a Git repository")
+  ) {
+    throw new Error(
+      `Unexpected installed inspect result:\n${inspect.stderr}${inspect.stdout}`,
+    );
   }
 } finally {
   rmSync(consumerDirectory, { recursive: true, force: true });

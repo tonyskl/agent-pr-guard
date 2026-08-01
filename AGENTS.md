@@ -17,6 +17,10 @@
 13. Generated or fixture repositories must never execute arbitrary install scripts.
 14. Keep parsing, rule evaluation, and reporting separated.
 15. Public JSON output will eventually be a compatibility contract and must be designed cautiously.
+16. Invoke Git only through argument-array process APIs with `shell: false`; never fetch, execute repository code, or enable external diff commands.
+17. Parse only added unified-diff lines, preserve their new-file line number, and keep findings sorted by file, line, then rule ID.
+18. Git integration tests must use isolated temporary repositories with a local test identity and always clean them up.
+19. Exit code 0 means passed, 1 means blocking findings, and 2 means an execution or input failure.
 
 ## Required validation
 
