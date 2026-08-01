@@ -4,7 +4,7 @@ Agent PR Guard is a deterministic, local-first CLI and CI tool for identifying r
 
 ## Status
 
-This is an early project foundation. The command-line interface and domain model exist, but pull request analysis and detection rules have not yet been implemented.
+The first inspection rules are available for local Git comparisons. GitHub-hosted pull request integration is not implemented.
 
 ## Why it exists
 
@@ -38,7 +38,16 @@ agent-pr-guard inspect --base main --head HEAD
 agent-pr-guard inspect --base origin/main --format json --config .agent-pr-guard.json
 ```
 
-`inspect` currently reports that analysis is not yet implemented; it does not inspect your repository.
+`inspect` compares `base...head` using local Git references and evaluates only newly added lines. Both references must already exist locally; Agent PR Guard never fetches references.
+
+## Supported rules
+
+| Rule    | Severity | Detects                                                                                     |
+| ------- | -------- | ------------------------------------------------------------------------------------------- |
+| APG1001 | High     | Newly added `test.only`, `it.only`, `describe.only`, `suite.only`, or `context.only` calls. |
+| APG1002 | High     | Newly added `test.skip`, `it.skip`, `describe.skip`, `suite.skip`, or `context.skip` calls. |
+
+JavaScript and TypeScript files with `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, and `.cts` extensions are supported. The scanner deliberately ignores comments, strings, template text, and regular-expression literals; it is conservative rather than a complete JavaScript parser.
 
 ## Development
 
@@ -68,11 +77,11 @@ verifies the installed `agent-pr-guard` binary without publishing it.
 
 ## Proposed exit codes
 
-| Code | Meaning                                                                        |
-| ---- | ------------------------------------------------------------------------------ |
-| 0    | Analysis completed with no findings at the configured failure threshold.       |
-| 1    | Analysis completed with findings at or above the configured failure threshold. |
-| 2    | Invalid command usage, configuration, or an operational error.                 |
+| Code | Meaning                                                        |
+| ---- | -------------------------------------------------------------- |
+| 0    | Inspection completed with no high or critical findings.        |
+| 1    | Inspection completed with high or critical findings.           |
+| 2    | Invalid command usage, configuration, or an operational error. |
 
 These semantics are proposed and may change before the first stable release.
 
