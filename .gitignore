@@ -39,6 +39,8 @@ build/Release
 
 # Dependency directories
 node_modules/
+.artifacts/
+package-consumer-*/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -81,6 +83,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist/
 .output
 
 # Gatsby files
@@ -127,6 +130,7 @@ dist
 
 # pnpm
 .pnpm-store
+.pnpm-store/
 
 # yarn v3
 .pnp.*
