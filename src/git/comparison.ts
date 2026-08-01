@@ -25,7 +25,9 @@ export type GitComparisonErrorCode =
   | "base-not-found"
   | "head-not-found"
   | "comparison-failed"
-  | "diff-too-large";
+  | "diff-too-large"
+  | "too-many-files"
+  | "too-many-added-lines";
 
 export class GitComparisonError extends Error {
   public constructor(

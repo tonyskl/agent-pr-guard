@@ -2,6 +2,11 @@ import type { ChangedFile, GitComparison } from "./comparison.js";
 import { GitComparisonError } from "./comparison.js";
 import { runGit } from "./process.js";
 import { parseUnifiedDiff } from "./unified-diff.js";
+import {
+  MAXIMUM_ADDED_LINES,
+  MAXIMUM_CHANGED_FILES,
+  MAXIMUM_TOTAL_PATCH_BYTES,
+} from "./limits.js";
 
 const parseNameStatus = (output: Buffer): readonly ChangedFile[] => {
   const values = output.toString("utf8").split("\0");
@@ -81,8 +86,14 @@ export const readGitComparison = async (
       "Unable to read changed files.",
     );
   }
+  if (files.length > MAXIMUM_CHANGED_FILES)
+    throw new GitComparisonError(
+      "too-many-files",
+      `Comparison exceeds the ${MAXIMUM_CHANGED_FILES} changed-file safety limit.`,
+    );
 
   const addedLines = [];
+  let totalPatchBytes = 0;
   for (const file of files) {
     if (file.status === "deleted") continue;
     try {
@@ -101,7 +112,18 @@ export const readGitComparison = async (
         ],
         cwd,
       );
+      totalPatchBytes += patch.length;
+      if (totalPatchBytes > MAXIMUM_TOTAL_PATCH_BYTES)
+        throw new GitComparisonError(
+          "diff-too-large",
+          `Comparison patches exceed the ${MAXIMUM_TOTAL_PATCH_BYTES / 1024 / 1024} MiB safety limit.`,
+        );
       addedLines.push(...parseUnifiedDiff(patch.toString("utf8"), file));
+      if (addedLines.length > MAXIMUM_ADDED_LINES)
+        throw new GitComparisonError(
+          "too-many-added-lines",
+          `Comparison exceeds the ${MAXIMUM_ADDED_LINES} added-line safety limit.`,
+        );
     } catch (error) {
       if (error instanceof GitComparisonError) throw error;
       throw new GitComparisonError(

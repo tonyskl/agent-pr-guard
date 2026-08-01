@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 import { GitComparisonError } from "./comparison.js";
+import { MAXIMUM_PROCESS_STDERR_BYTES } from "./limits.js";
 
 const maximumGitOutputBytes = 10 * 1024 * 1024;
 
@@ -18,7 +19,15 @@ export const runGit = async (
     const output: Buffer[] = [];
     const errors: Buffer[] = [];
     let size = 0;
+    let errorSize = 0;
     let exceededLimit = false;
+    let settled = false;
+    const settle = (callback: () => void) => {
+      if (!settled) {
+        settled = true;
+        callback();
+      }
+    };
 
     const collect = (chunk: Buffer) => {
       size += chunk.length;
@@ -31,35 +40,44 @@ export const runGit = async (
     };
 
     process.stdout.on("data", collect);
-    process.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    process.stderr.on("data", (chunk: Buffer) => {
+      errorSize += chunk.length;
+      if (errorSize <= MAXIMUM_PROCESS_STDERR_BYTES) errors.push(chunk);
+    });
     process.on("error", () =>
-      reject(
-        new GitComparisonError(
-          "comparison-failed",
-          "Unable to start the Git executable.",
+      settle(() =>
+        reject(
+          new GitComparisonError(
+            "comparison-failed",
+            "Unable to start the Git executable.",
+          ),
         ),
       ),
     );
     process.on("close", (code) => {
       if (exceededLimit) {
-        reject(
-          new GitComparisonError(
-            "diff-too-large",
-            `Git output exceeds the ${maximumGitOutputBytes / 1024 / 1024} MiB safety limit.`,
+        settle(() =>
+          reject(
+            new GitComparisonError(
+              "diff-too-large",
+              `Git output exceeds the ${maximumGitOutputBytes / 1024 / 1024} MiB safety limit.`,
+            ),
           ),
         );
         return;
       }
       if (code !== 0) {
         const detail = Buffer.concat(errors).toString("utf8").trim();
-        reject(
-          new GitComparisonError(
-            "comparison-failed",
-            detail || "Git comparison failed.",
+        settle(() =>
+          reject(
+            new GitComparisonError(
+              "comparison-failed",
+              detail || "Git comparison failed.",
+            ),
           ),
         );
         return;
       }
-      resolve(Buffer.concat(output));
+      settle(() => resolve(Buffer.concat(output)));
     });
   });
